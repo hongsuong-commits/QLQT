@@ -2,8 +2,10 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, aiStatus, DB_PATH } from './config.js';
-import { db } from './db.js';import { homeRouter } from './routes/home.js';
+import { timingSafeEqual } from 'node:crypto';
+import { ROOT, aiStatus, DB_PATH, ORIGIN_SECRET } from './config.js';
+import { db } from './db.js';
+import { homeRouter } from './routes/home.js';
 import { examsRouter } from './routes/exams.js';
 import { documentsRouter } from './routes/documents.js';
 import { importsRouter } from './routes/imports.js';
@@ -30,6 +32,22 @@ export function createApp() {
     res.setHeader('Cache-Control', 'no-store');
     next();
   });
+
+  // When deployed behind the Vercel adapter, reject requests that bypass it.
+  if (ORIGIN_SECRET) {
+    app.use('/api', (req, res, next) => {
+      const provided = String(req.get('x-origin-secret') || '');
+      const expected = Buffer.from(ORIGIN_SECRET);
+      const actual = Buffer.from(provided);
+      const valid =
+        actual.length === expected.length && timingSafeEqual(actual, expected);
+      if (!valid) {
+        res.status(403).json({ error: 'Yêu cầu API không hợp lệ.' });
+        return;
+      }
+      next();
+    });
+  }
 
   app.get('/api/health', (_req, res) => {
     res.json({

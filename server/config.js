@@ -39,6 +39,8 @@ export const SEED_DIR = path.resolve(process.env.SEED_DIR || path.join(ROOT, 'se
 
 export const PORT = int(process.env.PORT, 3000);
 export const MAX_UPLOAD_BYTES = int(process.env.MAX_UPLOAD_BYTES, 15 * 1024 * 1024);
+/** Shared secret sent by the Vercel API adapter; empty disables the check. */
+export const ORIGIN_SECRET = process.env.ORIGIN_SECRET || '';
 
 export const AI = {
   baseUrl: (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
