@@ -134,6 +134,8 @@ export function parseExamText(input) {
   }
 
   const questions = [];
+  /** A diagram often serves two consecutive questions; keep it until a new one appears. */
+  let lastDiagramContext = '';
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
     const start = match.index + match[0].length;
@@ -143,13 +145,14 @@ export function parseExamText(input) {
     const parsed = parseBlock(block, position);
 
     if (!parsed.content.includes('```')) {
-      const previousEnd = index === 0 ? 0 : matches[index - 1].index + matches[index - 1][0].length;
       const previousStart = index === 0 ? 0 : matches[index - 1].index;
       const between =
         index === 0 ? body.slice(0, match.index) : body.slice(previousStart, match.index);
-      void previousEnd;
       const context = extractContext(between);
-      if (context) parsed.content = `${context}\n\n${parsed.content}`.trim();
+      if (context) lastDiagramContext = context;
+      if (lastDiagramContext) {
+        parsed.content = `${lastDiagramContext}\n\n${parsed.content}`.trim();
+      }
     }
 
     const inline = block.match(

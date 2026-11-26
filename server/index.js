@@ -3,15 +3,17 @@ import path from 'node:path';
 import { createApp } from './app.js';
 import { PORT, ROOT, aiStatus } from './config.js';
 import { db } from './db.js';
-import { seedIfEmpty } from './seed.js';
+import { seedIfEmpty, seedMissingExams } from './seed.js';
 
-const seeded = await seedIfEmpty();
+const seeded = seedIfEmpty();
+const added = seedMissingExams();
 const app = createApp();
 
 const server = app.listen(PORT, () => {
   const dist = path.join(ROOT, 'client', 'dist', 'index.html');
   console.log(`Sổ Đề đang chạy tại http://localhost:${PORT}`);
   if (seeded) console.log(`Đã nạp dữ liệu mẫu: ${seeded}`);
+  if (added) console.log(`Đã thêm đề mới: ${added}`);
   if (!fs.existsSync(dist)) {
     console.log('Giao diện chưa build. Chạy "npm run build" hoặc "npm run dev".');
   }

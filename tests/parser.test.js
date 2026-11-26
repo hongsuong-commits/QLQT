@@ -22,3 +22,20 @@ test('parser báo nội dung rỗng, định dạng sai và thiếu trường th
   assert.ok(parsed.warnings.some((warning) => warning.includes('thiếu phương án B')));
   assert.ok(parsed.warnings.some((warning) => warning.includes('chưa có đáp án')));
 });
+
+test('ba đề nâng cao có 40 câu, đủ đáp án và sơ đồ cho cả câu hỏi thứ hai', () => {
+  for (const file of ['13-DeNangCao-1.md', '14-DeNangCao-2.md', '15-DeNangCao-3.md']) {
+    const source = fs.readFileSync(new URL(`../seed/${file}`, import.meta.url), 'utf8');
+    const parsed = parseExamText(source);
+    assert.equal(parsed.questions.length, 40, `${file}: số câu`);
+    assert.deepEqual(parsed.warnings, [], `${file}: cảnh báo`);
+    assert.ok(
+      parsed.questions.every((q) => /^[A-D]$/.test(q.correctOption)),
+      `${file}: đáp án`,
+    );
+    for (const position of [30, 32, 34, 36, 38, 40]) {
+      const question = parsed.questions.find((q) => q.position === position);
+      assert.match(question.content, /```/, `${file} câu ${position}: thiếu sơ đồ`);
+    }
+  }
+});

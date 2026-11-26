@@ -40,6 +40,21 @@ const EXAM_FILES = [
     title: 'Đề mô phỏng 4 — AI, bảo mật & BPMN',
     topic: 'Agentic coding · Bảo mật · Kiểm thử',
   },
+  {
+    file: '13-DeNangCao-1.md',
+    title: 'Đề nâng cao 1 — Quyết định, ngưỡng và lan can',
+    topic: 'Vận dụng liên chương · Ngưỡng tin cậy · Lan can AI',
+  },
+  {
+    file: '14-DeNangCao-2.md',
+    title: 'Đề nâng cao 2 — Kiểm chứng, bảo mật và vận hành',
+    topic: 'Kiểm chứng · Bảo mật · Vận hành workflow',
+  },
+  {
+    file: '15-DeNangCao-3.md',
+    title: 'Đề nâng cao 3 — Đọc sơ đồ, kiểm toán và cải tiến',
+    topic: 'BPMN nâng cao · Kiểm toán · Cải tiến quy trình',
+  },
 ];
 
 const SUBJECT = 'MIS3047 — Quản lý quy trình kinh doanh';
@@ -161,9 +176,114 @@ export function seedIfEmpty() {
   return `${exams.length} đề, ${documents.length} tài liệu`;
 }
 
+/**
+ * Add bundled exams that are missing from an existing database.
+ *
+ * `seedIfEmpty()` only runs on a fresh database, so upgrading an installation
+ * must not silently skip new exam files. Matching is by title, which makes
+ * this safe to call on every server start and on manual `node server/seed.js`.
+ */
+export function seedMissingExams() {
+  if (!fs.existsSync(SEED_DIR)) return null;
+
+  const existingTitles = new Set(
+    db
+      .prepare('SELECT title FROM exams')
+      .all()
+      .map((row) => row.title),
+  );
+  const documentIds = db
+    .prepare('SELECT id FROM documents ORDER BY created_at, id')
+    .all()
+    .map((row) => row.id);
+
+  const warnings = [];
+  const exams = [];
+  for (const definition of EXAM_FILES) {
+    const title = plainInline(definition.title);
+    if (existingTitles.has(title)) continue;
+    const fullPath = path.join(SEED_DIR, definition.file);
+    if (!fs.existsSync(fullPath)) {
+      warnings.push(`${definition.file}: không tìm thấy tệp — bỏ qua.`);
+      continue;
+    }
+    const text = fs.readFileSync(fullPath, 'utf8');
+    const parsed = parseExamText(text);
+    if (parsed.questions.length < 10) {
+      warnings.push(`${definition.file}: chỉ nhận ra ${parsed.questions.length} câu — bỏ qua.`);
+      continue;
+    }
+    if (parsed.questions.some((question) => !question.correctOption)) {
+      warnings.push(`${definition.file}: có câu thiếu đáp án — bỏ qua.`);
+      continue;
+    }
+    exams.push({
+      id: randomUUID(),
+      ...definition,
+      title,
+      description: `${parsed.questions.length} câu · 75 phút · Một đáp án đúng. Bộ nâng cao, có câu vận dụng liên chương và 12 câu đọc sơ đồ BPMN. Nội dung giữ nguyên từ tệp ${definition.file}.`,
+      questions: parsed.questions,
+    });
+  }
+
+  if (!exams.length) {
+    for (const warning of warnings) console.warn('[seed]', warning);
+    return null;
+  }
+
+  const stamp = nowIso();
+  withTransaction(() => {
+    const insertExam = db.prepare(
+      `INSERT INTO exams (id, title, subject, topic, description, duration_minutes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 75, ?, ?)`,
+    );
+    const insertQuestion = db.prepare(
+      `INSERT INTO questions
+        (id, exam_id, position, content, option_a, option_b, option_c, option_d, correct_option, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const link = db.prepare(
+      'INSERT OR IGNORE INTO exam_documents (exam_id, document_id) VALUES (?, ?)',
+    );
+
+    for (const exam of exams) {
+      insertExam.run(
+        exam.id,
+        exam.title,
+        SUBJECT,
+        exam.topic,
+        exam.description,
+        stamp,
+        stamp,
+      );
+      for (const question of exam.questions) {
+        insertQuestion.run(
+          randomUUID(),
+          exam.id,
+          question.position,
+          question.content,
+          question.optionA,
+          question.optionB,
+          question.optionC,
+          question.optionD,
+          question.correctOption,
+          stamp,
+          stamp,
+        );
+      }
+      for (const documentId of documentIds) link.run(exam.id, documentId);
+    }
+  });
+
+  for (const warning of warnings) console.warn('[seed]', warning);
+  return `${exams.length} đề bổ sung`;
+}
+
 const isDirectRun =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirectRun) {
-  const result = seedIfEmpty();
-  console.log(result ? `Đã nạp: ${result}` : 'Cơ sở dữ liệu đã có đề, không nạp lại.');
+  const initial = seedIfEmpty();
+  const added = seedMissingExams();
+  console.log(initial ? `Đã nạp: ${initial}` : 'Cơ sở dữ liệu đã có đề, không nạp lại từ đầu.');
+  console.log(added ? `Đã thêm: ${added}` : 'Không có đề mới để thêm.');
 }
